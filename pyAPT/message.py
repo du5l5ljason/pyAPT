@@ -16,47 +16,9 @@ _Message = namedtuple(
   ['messageID', 'param1', 'param2', 'dest', 'src', 'data'])
 
 class Message(_Message):
-  @classmethod
-  def unpack(cls, databytes, header_only=False):
-    """
-    pack() produces a string of bytes from a Message, pack() produces a
-    Message from a string of bytes
 
-    If header_only is True, then we will only attempt to decode the header,
-    ignoring any bytes that follow, if any. This allows you get determine
-    what the message is without having to read it in its entirety.
-
-    Note that dest is returned AS IS, which means its MSB will be set if the
-    message is more than just a header.
-    """
-    Header = namedtuple('Header', ['messageID', 'param1', 'param2', 'dest','src'])
-    hd = Header._make(st.unpack('<HBBBB',databytes[:6]))
-
-    # if MSB of dest is set, then there is additional data to follow
-    if hd.dest & 0x80:
-      datalen = hd.param1 | (hd.param2<<8)
-
-      if header_only:
-        data=None
-      else:
-        data=st.unpack('<%dB'%(datalen), databytes[6:])
-
-      return Message( hd.messageID,
-                      dest = hd.dest,
-                      src = hd.src,
-                      # we need these to be set since we need to know
-                      # how long the data is when we decode only a header
-                      param1 = hd.param1,
-                      param2 = hd.param2,
-                      data = data)
-    else:
-      return Message( hd.messageID,
-                      param1 = hd.param1,
-                      param2 = hd.param2,
-                      dest = hd.dest,
-                      src = hd.src)
-
-  def __new__(cls, messageID, dest=0x50, src=0x01, param1=0, param2=0, data=None):
+  def __new__(cls, messageID, dest=0x11, src=0x01, param1=0, param2=0, data=None):
+    print("hello")
     assert(type(messageID) == int)
     if data:
       assert(param1 == 0 and param2 == 0)
@@ -82,6 +44,47 @@ class Message(_Message):
                                           dest,
                                           src,
                                           None)
+
+  @classmethod
+  def unpack(cls, databytes, header_only=False):
+    """
+    pack() produces a string of bytes from a Message, pack() produces a
+    Message from a string of bytes
+
+    If header_only is True, then we will only attempt to decode the header,
+    ignoring any bytes that follow, if any. This allows you get determine
+    what the message is without having to read it in its entirety.
+
+    Note that dest is returned AS IS, which means its MSB will be set if the
+    message is more than just a header.
+    """
+    Header = namedtuple('Header', ['messageID', 'param1', 'param2', 'dest','src'])
+    hd = Header._make(st.unpack('<HBBBB',databytes[:6]))
+
+    # if MSB of dest is set, then there is additional data to follow
+    if hd.dest & 0x80:
+      datalen = hd.param1 | (hd.param2<<8)
+      print(datalen)
+      if header_only:
+        data=None
+      else:
+        data=st.unpack('<%dB'%(datalen), databytes[6:])
+
+      # print "message header: dest ",  str(hd.dest), " src " , str(hd.src), ", param1 " , str(hd.param1)
+      return Message( hd.messageID,
+                      dest = hd.dest,
+                      src = hd.src,
+                      # we need these to be set since we need to know
+                      # how long the data is when we decode only a header
+                      param1 = hd.param1,
+                      param2 = hd.param2,
+                      data = data)
+    else:
+      return Message( hd.messageID,
+                      param1 = hd.param1,
+                      param2 = hd.param2,
+                      dest = hd.dest,
+                      src = hd.src)
 
   def pack(self, verbose=False):
     """

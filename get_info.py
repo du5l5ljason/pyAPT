@@ -8,7 +8,6 @@ from __future__ import absolute_import
 from __future__ import print_function
 
 import pyAPT
-
 from runner import runner_serial
 
 @runner_serial

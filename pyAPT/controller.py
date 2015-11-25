@@ -3,6 +3,8 @@ Simple class which encapsulate an APT controller
 """
 from __future__ import absolute_import, division
 import pylibftdi
+from pylibftdi import USB_PID_LIST, USB_VID_LIST
+USB_PID_LIST.append(0xfaf0)
 import time
 import struct as st
 
@@ -40,7 +42,6 @@ class Controller(object):
     dev.flush(pylibftdi.FLUSH_BOTH)
 
     time.sleep(50.0/1000)
-
     # skipping reset part since it looks like pylibftdi does it already
 
     # this is pulled from ftdi.h
@@ -52,7 +53,6 @@ class Controller(object):
     self.serial_number = serial_number
     self.label = label
     self._device = dev
-
     # some conservative limits
     # velocity is in mm/s
     # acceleration is in mm^2/s
@@ -190,8 +190,19 @@ class Controller(object):
     resetmsg = Message(message.MGMSG_MOT_SET_PZSTAGEPARAMDEFAULTS)
     self._send_message(resetmsg)
 
-  def request_home_params(self):
-    reqmsg = Message(message.MGMSG_MOT_REQ_HOMEPARAMS)
+  def request_home_params(self, param1 = 0x01,
+                                                  param2 = 0x00,
+                                                  dest = 0x21,
+                                                  src = 0x01):
+
+    print("param 1 ", param1, " dest ", dest)
+    if param1 == 0x02:
+      dest = 0x22
+    reqmsg = Message(message.MGMSG_MOT_REQ_HOMEPARAMS,
+                                  dest,
+                                  src,
+                                  param1,
+                                  param2)
     self._send_message(reqmsg)
 
     getmsg = self._wait_message(message.MGMSG_MOT_GET_HOMEPARAMS)
@@ -233,14 +244,14 @@ class Controller(object):
 
     # first get the current settings for homing. We do this because despite
     # the fact that the protocol spec says home direction, limit switch,
-    # and offset distance parameters are not used, they are in fact 
+    # and offset distance parameters are not used, they are in fact
     # significant. If I just pass in 0s for those parameters when setting
     # homing parameter the stage goes the wrong way and runs itself into
     # the other end, causing an error condition.
     #
     # To get around this, and the fact the correct values don't seem to be
     # documented, we get the current parameters, assuming they are correct,
-    # and then modify only the velocity and offset component, then send it 
+    # and then modify only the velocity and offset component, then send it
     # back to the controller.
     curparams = list(self.request_home_params())
 
@@ -467,11 +478,12 @@ class Controller(object):
       - modification state of controller
       - number of channels
     """
-
+    print "request message"
     reqmsg = Message(message.MGMSG_HW_REQ_INFO)
     self._send_message(reqmsg)
-
+    print "wait message"
     getmsg = self._wait_message(message.MGMSG_HW_GET_INFO)
+    print "received message"
     """
     <: small endian
     I:    4 bytes for serial number
@@ -485,7 +497,7 @@ class Controller(object):
     H:    2 bytes for number of channels
     """
     info = st.unpack('<I8sH4s48s12sHHH', getmsg.datastring)
-
+    print "message unpacked"
     sn,model,hwtype,fwver,notes,_,hwver,modstate,numchan = info
 
     fwverminor = ord(fwver[0])
@@ -493,7 +505,7 @@ class Controller(object):
     fwvermajor = ord(fwver[2])
 
     fwver = '%d.%d.%d'%(fwvermajor,fwverinterim, fwverminor)
-
+    print fwverminor
     return (sn,model,hwtype,fwver,notes,hwver,modstate,numchan)
 
   def stop(self, channel=1, immediate=False, wait=True):
@@ -550,7 +562,7 @@ class ControllerStatus(object):
   This class encapsulate the controller status, which includes its position,
   velocity, and various flags.
 
-  The position and velocity properties will return realworld values of 
+  The position and velocity properties will return realworld values of
   mm and mm/s respectively.
   """
   def __init__(self, controller, statusbytestring):
