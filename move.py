@@ -21,7 +21,7 @@ def main(args):
     dist = float(args[2])
 
   try:
-    with pyAPT.MTS50(serial_number=serial) as con:
+    with pyAPT.BSC202(serial_number=serial) as con:
       print('Found APT controller S/N',serial)
       print('\tMoving stage by %.2fmm...'%(dist), end=' ')
       con.move(dist)

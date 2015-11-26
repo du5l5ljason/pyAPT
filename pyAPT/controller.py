@@ -45,7 +45,7 @@ class Controller(object):
     # skipping reset part since it looks like pylibftdi does it already
 
     # this is pulled from ftdi.h
-    SIO_RTS_CTS_HS = (0x1 << 8)
+    SIO_RTS_CTS_HS = (0x0 << 8)
     _checked_c(dev.ftdi_fn.ftdi_setflowctrl(SIO_RTS_CTS_HS))
 
     _checked_c(dev.ftdi_fn.ftdi_setrts(1))
@@ -113,12 +113,13 @@ class Controller(object):
     returned.
     """
     data = bytes()
+    count = 0
     while len(data) < length:
       diff = length - len(data)
       data += self._device.read(diff)
-      if not block:
+      if not block or (count == 1000):
         break
-
+      count += 1
       time.sleep(0.001)
 
     return data
@@ -137,6 +138,7 @@ class Controller(object):
     found = False
     while not found:
       m = self._read_message()
+      print('\tThe message Id is ', hex(m.messageID))
       found = m.messageID == expected_messageID
       if found:
         return m
@@ -195,14 +197,16 @@ class Controller(object):
                                                   dest = 0x21,
                                                   src = 0x01):
 
-    print("param 1 ", param1, " dest ", dest)
-    if param1 == 0x02:
+    if int(param1) == 2:
+      print('channel 2')
       dest = 0x22
+
+    print("param 1 ", param1, " dest ", dest)
     reqmsg = Message(message.MGMSG_MOT_REQ_HOMEPARAMS,
-                                  dest,
-                                  src,
-                                  param1,
-                                  param2)
+                                  dest = dest,
+                                  src = src,
+                                  param1 = int(param1),
+                                  param2 = param2)
     self._send_message(reqmsg)
 
     getmsg = self._wait_message(message.MGMSG_MOT_GET_HOMEPARAMS)
@@ -253,48 +257,58 @@ class Controller(object):
     # documented, we get the current parameters, assuming they are correct,
     # and then modify only the velocity and offset component, then send it
     # back to the controller.
-    curparams = list(self.request_home_params())
+    # curparams = list(self.request_home_params())
+    # print(curparams[-2])
+    # print(curparams[-1])
+    # # make sure we never exceed the limits of our stage
 
-    # make sure we never exceed the limits of our stage
+    # offset = min(offset, self.linear_range[1])
+    # offset = max(offset, 0)
+    # offset_apt = offset * self.position_scale
 
-    offset = min(offset, self.linear_range[1])
-    offset = max(offset, 0)
-    offset_apt = offset * self.position_scale
+    # """
+    # <: little endian
+    # H: 2 bytes for channel id
+    # H: 2 bytes for home direction
+    # H: 2 bytes for limit switch
+    # i: 4 bytes for homing velocity
+    # i: 4 bytes for offset distance
+    # """
 
-    """
-    <: little endian
-    H: 2 bytes for channel id
-    H: 2 bytes for home direction
-    H: 2 bytes for limit switch
-    i: 4 bytes for homing velocity
-    i: 4 bytes for offset distance
-    """
+    # if velocity:
+    #   velocity = min(velocity, self.max_velocity)
+    #   curparams[-2] = int(velocity * self.velocity_scale)
 
-    if velocity:
-      velocity = min(velocity, self.max_velocity)
-      curparams[-2] = int(velocity * self.velocity_scale)
+    # curparams[-1] = offset_apt
 
-    curparams[-1] = offset_apt
+    # newparams= st.pack( '<HHHii',*curparams)
 
-    newparams= st.pack( '<HHHii',*curparams)
+    # homeparamsmsg = Message(message.MGMSG_MOT_SET_HOMEPARAMS,
+    #                                             dest = 0x21 | 0x80,
+    #                                             src = 0x01,
+    #                                             data=newparams)
+    # self._send_message(homeparamsmsg)
+    # time.sleep(0.5)
+    # if wait:
+    #   self.resume_end_of_move_messages()
+    # else:
+    #   self.suspend_end_of_move_messages()
 
-    homeparamsmsg = Message(message.MGMSG_MOT_SET_HOMEPARAMS, data=newparams)
-    self._send_message(homeparamsmsg)
-
-    if wait:
-      self.resume_end_of_move_messages()
-    else:
-      self.suspend_end_of_move_messages()
-
-    homemsg = Message(message.MGMSG_MOT_MOVE_HOME)
+    homemsg = Message(message.MGMSG_MOT_MOVE_HOME,
+                                          dest = 0x21,
+                                          src = 0x01,
+                                          param1 = 0x01,
+                                          param2 = 0x0)
     self._send_message(homemsg)
-
-    if wait:
-      self._wait_message(message.MGMSG_MOT_MOVE_HOMED)
-      return self.status()
+    time.sleep(0.5)
+    # if wait:
+    #   self._wait_message(message.MGMSG_MOT_MOVE_HOMED)
+      # return self.status()
 
   def position(self, channel=1, raw=False):
-    reqmsg = Message(message.MGMSG_MOT_REQ_POSCOUNTER, param1=channel)
+    reqmsg = Message(message.MGMSG_MOT_REQ_POSCOUNTER,
+                                  param1=channel,
+                                  dest = 0x21)
     self._send_message(reqmsg)
 
     getmsg = self._wait_message(message.MGMSG_MOT_GET_POSCOUNTER)
@@ -309,7 +323,9 @@ class Controller(object):
 
     if not raw:
       # convert position from POS_apt to POS using _position_scale
-      return 1.0*pos_apt / self.position_scale
+      print('\tposition scale ', self.position_scale)
+      print('\tpos_apt ', pos_apt)
+      return 1.0*float(pos_apt) / float(self.position_scale)
     else:
       return pos_apt
 
@@ -345,12 +361,13 @@ class Controller(object):
     """
     params = st.pack( '<Hi', channel, abs_pos_apt)
 
-    if wait:
-      self.resume_end_of_move_messages()
-    else:
-      self.suspend_end_of_move_messages()
+    # if wait:
+    #   self.resume_end_of_move_messages()
+    # else:
+    #   self.suspend_end_of_move_messages()
 
-    movemsg = Message(message.MGMSG_MOT_MOVE_ABSOLUTE,data=params)
+    movemsg = Message(message.MGMSG_MOT_MOVE_ABSOLUTE,
+                                    dest = 0x21,data=params)
     self._send_message(movemsg)
 
     if wait:

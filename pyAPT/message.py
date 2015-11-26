@@ -18,7 +18,6 @@ _Message = namedtuple(
 class Message(_Message):
 
   def __new__(cls, messageID, dest=0x11, src=0x01, param1=0, param2=0, data=None):
-    print("hello")
     assert(type(messageID) == int)
     if data:
       assert(param1 == 0 and param2 == 0)

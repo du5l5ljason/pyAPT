@@ -9,7 +9,7 @@ from __future__ import print_function
 
 import time
 import pyAPT
-
+import serial
 from runner import runner_serial
 
 def main(args):
@@ -21,9 +21,9 @@ def main(args):
     with pyAPT.BSC202(serial_number=serial) as con:
         print('\tIdentifying controller')
         con.identify()
-        print('\tHoming parameters:', con.request_home_params(channelID))
+        print('\tHoming parameters:', con.request_home_params(param1=channelID))
         print('\tHoming stage...', end=' ')
-        # con.home(velocity = 10)
+        con.home()
         print('homed')
 
 if __name__ == '__main__':
