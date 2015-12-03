@@ -20,7 +20,6 @@ class Message(_Message):
   def __new__(cls, messageID, dest=0x11, src=0x01, param1=0, param2=0, data=None):
     assert(type(messageID) == int)
     if data:
-      assert(param1 == 0 and param2 == 0)
       assert(type(data) in [list, tuple, str])
 
       if type(data) == str:
@@ -28,8 +27,8 @@ class Message(_Message):
 
       return super(Message, cls).__new__(Message,
                                           messageID,
-                                          None,
-                                          None,
+                                          param1,
+                                          param2,
                                           dest,
                                           src,
                                           data)
@@ -178,10 +177,18 @@ MGMSG_HEADER_SIZE = 6
 
 # Generic Commands
 MGMSG_MOD_IDENTIFY = 0x0223
+MGMSG_RACK_REQ_BAYUSED = 0x0060
+MGMSG_RACK_GET_BAYUSED = 0x0061
 MGMSG_HW_RESPONSE = 0x0080
+
+MGMSG_MOD_SET_CHANENABLESTATE = 0x0210
+MGMSG_MOD_REQ_CHANENABLESTATE = 0x0211
+MGMSG_MOD_GET_CHANENABLESTATE = 0x0212
 
 MGMSG_HW_REQ_INFO = 0x0005
 MGMSG_HW_GET_INFO = 0x0006
+MGMSG_HW_NO_FLASH_PROGRAMMING = 0x0018
+MSMSG_HW_RESPONSE = 0x0080
 
 MGMSG_MOT_ACK_DCSTATUSUPDATE = 0x0492
 

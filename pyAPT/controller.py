@@ -53,6 +53,7 @@ class Controller(object):
     self.serial_number = serial_number
     self.label = label
     self._device = dev
+    self._address = 0x50
     # some conservative limits
     # velocity is in mm/s
     # acceleration is in mm^2/s
@@ -96,12 +97,16 @@ class Controller(object):
       # XXX we might want a timeout here, or this will block forever
       self._device.close()
 
+  def address(self):
+    return self._address
+
   def _send_message(self, m):
     """
     m should be an instance of Message, or has a pack() method which returns
     bytes to be sent to the controller
     """
     self._device.write(m.pack())
+    print "TX: ", m
 
   def _read(self, length, block=True):
     """
@@ -132,13 +137,14 @@ class Controller(object):
       msglist = list(msg)
       msglist[-1] = data
       return Message._make(msglist)
+
+    print  "RX: ", msg
     return msg
 
   def _wait_message(self, expected_messageID):
     found = False
     while not found:
       m = self._read_message()
-      print('\tThe message Id is ', hex(m.messageID))
       found = m.messageID == expected_messageID
       if found:
         return m
@@ -169,17 +175,48 @@ class Controller(object):
 
     Position and velocity will be in mm and mm/s respectively.
     """
-    reqmsg = Message(message.MGMSG_MOT_REQ_DCSTATUSUPDATE, param1=channel)
+    reqmsg = Message(message.MGMSG_MOT_REQ_DCSTATUSUPDATE, param1=channel, dest = 0x21)
     self._send_message(reqmsg)
 
     getmsg = self._wait_message(message.MGMSG_MOT_GET_DCSTATUSUPDATE)
+    print(getmsg)
     return ControllerStatus(self, getmsg.datastring)
+
+  def init_notify(self):
+    """
+    Notify the controller of the source and destination addresses.
+    """
+    idmsg =  Message(message.MGMSG_HW_NO_FLASH_PROGRAMMING,
+                              dest = 0x21,
+                              src = 0x01)
+
+    self._send_message(idmsg)
 
   def identify(self):
     """
     Flashes the controller's activity LED
     """
-    idmsg = Message(message.MGMSG_MOD_IDENTIFY)
+    # idmsg = Message(message.MGMSG_MOD_SET_CHANENABLESTATE,
+    #                           param1 = 0x01,
+    #                           param2 = 0x01,
+    #                           dest = 0x21,
+    #                           src = 0x01)
+    # self._send_message(idmsg)
+
+    # idmsg = Message(message.MGMSG_MOD_REQ_CHANENABLESTATE,
+    #                           param1 = 0x01,
+    #                           dest = 0x21,
+    #                           src = 0x01)
+    # self._send_message(idmsg)
+
+    # getmsg = self._wait_message(message.MGMSG_MOD_GET_CHANENABLESTATE)
+
+    # print(getmsg)
+
+    idmsg = Message(message.MGMSG_MOD_IDENTIFY,
+                              param1 = 0x00,
+                              dest = 0x21)
+
     self._send_message(idmsg)
 
   def reset_parameters(self):
@@ -201,7 +238,6 @@ class Controller(object):
       print('channel 2')
       dest = 0x22
 
-    print("param 1 ", param1, " dest ", dest)
     reqmsg = Message(message.MGMSG_MOT_REQ_HOMEPARAMS,
                                   dest = dest,
                                   src = src,
@@ -227,7 +263,9 @@ class Controller(object):
       self._send_message(suspendmsg)
 
   def resume_end_of_move_messages(self):
-      resumemsg = Message(message.MGMSG_MOT_RESUME_ENDOFMOVEMSGS)
+      resumemsg = Message(message.MGMSG_MOT_RESUME_ENDOFMOVEMSGS,
+                                          dest = 0x21,
+                                          src = 0x01)
       self._send_message(resumemsg)
 
   def home(self, wait=True, velocity=None, offset=0):
@@ -257,14 +295,14 @@ class Controller(object):
     # documented, we get the current parameters, assuming they are correct,
     # and then modify only the velocity and offset component, then send it
     # back to the controller.
-    # curparams = list(self.request_home_params())
-    # print(curparams[-2])
-    # print(curparams[-1])
+    curparams = list(self.request_home_params())
+    print(curparams[-2])
+    print(curparams[-1])
     # # make sure we never exceed the limits of our stage
 
-    # offset = min(offset, self.linear_range[1])
-    # offset = max(offset, 0)
-    # offset_apt = offset * self.position_scale
+    offset = min(offset, self.linear_range[1])
+    offset = max(offset, 0)
+    offset_apt = offset * self.position_scale
 
     # """
     # <: little endian
@@ -275,35 +313,40 @@ class Controller(object):
     # i: 4 bytes for offset distance
     # """
 
-    # if velocity:
-    #   velocity = min(velocity, self.max_velocity)
-    #   curparams[-2] = int(velocity * self.velocity_scale)
+    if velocity:
+      velocity = min(velocity, self.max_velocity)
+      curparams[-2] = int(velocity * self.velocity_scale)
 
-    # curparams[-1] = offset_apt
+    curparams[-1] = offset_apt
 
-    # newparams= st.pack( '<HHHii',*curparams)
+    newparams= st.pack( '<HHHii',*curparams)
 
-    # homeparamsmsg = Message(message.MGMSG_MOT_SET_HOMEPARAMS,
-    #                                             dest = 0x21 | 0x80,
-    #                                             src = 0x01,
-    #                                             data=newparams)
-    # self._send_message(homeparamsmsg)
-    # time.sleep(0.5)
-    # if wait:
-    #   self.resume_end_of_move_messages()
-    # else:
-    #   self.suspend_end_of_move_messages()
+    # 1.  Set Home params
+    homeparamsmsg = Message(message.MGMSG_MOT_SET_HOMEPARAMS,
+                                                param1 = 0x0E,
+                                                dest = 0x21 | 0x80,
+                                                src = 0x01,
+                                                data=newparams)
+    self._send_message(homeparamsmsg)
 
+    if wait:
+      self.resume_end_of_move_messages()
+    else:
+      self.suspend_end_of_move_messages()
+
+    # 2.  Move HOME
     homemsg = Message(message.MGMSG_MOT_MOVE_HOME,
                                           dest = 0x21,
                                           src = 0x01,
                                           param1 = 0x01,
                                           param2 = 0x0)
     self._send_message(homemsg)
-    time.sleep(0.5)
+
+    # 3.  HOMED
     # if wait:
     #   self._wait_message(message.MGMSG_MOT_MOVE_HOMED)
-      # return self.status()
+    #   print("\tWaiting for homed message!")
+    # return self.status()
 
   def position(self, channel=1, raw=False):
     reqmsg = Message(message.MGMSG_MOT_REQ_POSCOUNTER,
@@ -361,13 +404,14 @@ class Controller(object):
     """
     params = st.pack( '<Hi', channel, abs_pos_apt)
 
-    # if wait:
-    #   self.resume_end_of_move_messages()
-    # else:
-    #   self.suspend_end_of_move_messages()
+    if wait:
+      self.resume_end_of_move_messages()
+    else:
+      self.suspend_end_of_move_messages()
 
     movemsg = Message(message.MGMSG_MOT_MOVE_ABSOLUTE,
-                                    dest = 0x21,data=params)
+                                    param1 = 0x06,
+                                    dest = 0x21 | 0x80, data=params)
     self._send_message(movemsg)
 
     if wait:
@@ -378,7 +422,7 @@ class Controller(object):
       # stationary when we return
       while sts.velocity_apt:
         time.sleep(0.01)
-        sts = self.status()
+        # sts = self.status()
       return sts
     else:
       return None
@@ -482,6 +526,8 @@ class Controller(object):
 
     return min_vel, acc, max_vel
 
+
+
   def info(self):
     """
     Gets hardware info of the controller, returned as a tuple containing:
@@ -495,12 +541,9 @@ class Controller(object):
       - modification state of controller
       - number of channels
     """
-    print "request message"
-    reqmsg = Message(message.MGMSG_HW_REQ_INFO)
+    reqmsg = Message(message.MGMSG_HW_REQ_INFO, dest = self.address())
     self._send_message(reqmsg)
-    print "wait message"
     getmsg = self._wait_message(message.MGMSG_HW_GET_INFO)
-    print "received message"
     """
     <: small endian
     I:    4 bytes for serial number
@@ -514,7 +557,7 @@ class Controller(object):
     H:    2 bytes for number of channels
     """
     info = st.unpack('<I8sH4s48s12sHHH', getmsg.datastring)
-    print "message unpacked"
+
     sn,model,hwtype,fwver,notes,_,hwver,modstate,numchan = info
 
     fwverminor = ord(fwver[0])

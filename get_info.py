@@ -2,24 +2,33 @@
 """
 Usage: python get_info.py [<serial>]
 
-Gets the controller information of all APT controllers, or the one specified
+Gets the  controller information of all APT controllers, or the one specified
 """
 from __future__ import absolute_import
 from __future__ import print_function
 
 import pyAPT
+from pyAPT import BSC202
+from pyAPT import macros_apt as macros
 from runner import runner_serial
 
 @runner_serial
 def info(serial):
-  with pyAPT.Controller(serial_number=serial) as con:
-    info = con.info()
-    print('\tController info:')
-    labels=['S/N','Model','Type','Firmware Ver', 'Notes', 'H/W Ver',
-            'Mod State', 'Channels']
 
-    for idx,ainfo in enumerate(info):
-      print('\t%12s: %s'%(labels[idx], bytes(ainfo)))
+  addr_list = [macros.MOTHER_BOARD_ID, macros.BAY_ID_1, macros.BAY_ID_2]
+  with pyAPT.BSC202(serial_number=serial) as con:
+
+        # info = con.info()
+        # print('\tController info:')
+        # labels=['S/N','Model','Type','Firmware Ver', 'Notes', 'H/W Ver',
+        #         'Mod State', 'Channels']
+
+        # for idx,ainfo in enumerate(info):
+        #   print('\t%12s: %s'%(labels[idx], bytes(ainfo)))
+        print('INIT!')
+        address = con.address()
+        print('address %04x' % address)
+
 
 if __name__ == '__main__':
   import sys

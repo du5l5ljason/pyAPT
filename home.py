@@ -20,6 +20,7 @@ def main(args):
 
     with pyAPT.BSC202(serial_number=serial) as con:
         print('\tIdentifying controller')
+        con.init_notify()
         con.identify()
         print('\tHoming parameters:', con.request_home_params(param1=channelID))
         print('\tHoming stage...', end=' ')

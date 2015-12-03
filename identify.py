@@ -13,7 +13,7 @@ from runner import runner_serial
 
 @runner_serial
 def identify(serial):
-  with pyAPT.Controller(serial_number=serial) as con:
+  with pyAPT.BSC202(serial_number=serial) as con:
     print('\tIdentifying controller')
     con.identify()
     print('\n>>>>Press enter to continue')
