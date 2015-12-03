@@ -175,7 +175,7 @@ class Controller(object):
 
     Position and velocity will be in mm and mm/s respectively.
     """
-    reqmsg = Message(message.MGMSG_MOT_REQ_DCSTATUSUPDATE, param1=channel, dest = 0x21)
+    reqmsg = Message(message.MGMSG_MOT_REQ_DCSTATUSUPDATE, dest = self.address())
     self._send_message(reqmsg)
 
     getmsg = self._wait_message(message.MGMSG_MOT_GET_DCSTATUSUPDATE)
@@ -488,7 +488,7 @@ class Controller(object):
     i: 4 bytes for max velocity
     """
     params = st.pack('<Hiii',channel,0,acc_apt, max_vel_apt)
-    setmsg = Message(message.MGMSG_MOT_SET_VELPARAMS, data=params)
+    setmsg = Message(message.MGMSG_MOT_SET_VELPARAMS, dest = self.address(), data=params)
     self._send_message(setmsg)
 
   def velocity_parameters(self, channel=1, raw=False):

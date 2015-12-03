@@ -22,8 +22,18 @@ class BSC202(Controller):
       if state:
         print "bay", i, "is used!"
         # allocate address
-        bay_ctrl_1 = bay_controller(self, self._module_address[i])
-        print bay_ctrl_1.controller()
+        bay_ctrl = bay_controller(self, self._module_address[i])
+        # set channel state - channel 1 on.
+        bay_ctrl.controller().set_chanelable_state(channelID = 0x01)
+        # set digital output
+        bay_ctrl.controller().set_dig_output()
+        # set velocity params 0x0413
+        bay_ctrl.controller().set_velocity_parameters()
+        # set jog params 0x0416
+
+        # set limit switch params 0x0423
+        self.modules.append(bay_ctrl)
+
 
     # Check
     # Note that these values are pulled from the APT User software,
@@ -52,18 +62,35 @@ class BSC202(Controller):
 
   def request_bay_used(self, bayId = 0x00):
     reqmsg = Message(message.MGMSG_RACK_REQ_BAYUSED,
-                              param1 = bayId)
+                              param1 = bayId,
+                              dest = self.address())
 
     self._send_message(reqmsg)
     getmsg = self._wait_message(message.MGMSG_RACK_GET_BAYUSED)
 
     # print("msgID = %04x, bayID = %02x, state = %02x, dest = %02x, src = %2x" %(getmsg.messageID, getmsg.param1, getmsg.param2, getmsg.dest, getmsg.src))
     return getmsg.param2 == 1
-  def request_chanenable_state(self, channelID = 0x00, dest = 0x00):
+
+  def set_chanelable_state(self, channelID = 0x00):
+    setmsg = Message(message.MGMSG_MOD_SET_CHANENABLESTATE,
+                              param1 = channelID,
+                              dest = self.address())
+    self._send_message(setmsg)
+
+  def request_chanenable_state(self, channelID = 0x00):
     reqmsg = Message(message.MGMSG_MOD_REQ_CHANENABLESTATE,
                               param1 = channelID,
-                              dest = dest)
+                              dest = self.address())
 
     self._send_message(reqmsg)
     getmsg = self._wait_message(message.MGMSG_MOD_GET_CHANENABLESTATE)
     print(getmsg)
+
+  def set_dig_output(self):
+    setmsg = Message(message.MGMSG_MOD_SET_CHANENABLESTATE,
+                              dest = self.address())
+
+    self._send_message(setmsg)
+
+
+
