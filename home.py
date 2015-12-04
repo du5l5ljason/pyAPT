@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Usage: python home.py [<serial>] [<channel ID>]
+Usage: python home.py [<serial>] [<moduleID>]
 
 This program homes all APT controllers found, or of the one specified
 """
@@ -14,18 +14,18 @@ from runner import runner_serial
 
 def main(args):
     serial = args[1]
-    channelID = args[2]
-    print('\tSerial No ', serial)
-    print('\tChannel ID', channelID)
+    moduleID = int(args[2])
 
     with pyAPT.BSC202(serial_number=serial) as con:
-        print('\tIdentifying controller')
-        con.init_notify()
-        con.identify()
-        print('\tHoming parameters:', con.request_home_params(param1=channelID))
-        print('\tHoming stage...', end=' ')
+        numModules = con.numModules()
+        if moduleID >= numModules:
+            print("Error: moduleID %d is exceeding the number of modules!" % moduleID)
+            return 1
+
+        con.route_to_module(moduleID)
         con.home()
-        print('homed')
+        print('\n>>>>HOMED! Press any key to exit!')
+        sys.stdin.readline()
 
 if __name__ == '__main__':
   import sys

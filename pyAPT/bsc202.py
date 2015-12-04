@@ -67,9 +67,9 @@ class BSC202(Controller):
         # set jog params 0x0416
 
         # set limit switch params 0x0423
-
+        bay_ctrl.controller().set_lim_switch_params()
         # set power params
-        # bay_ctrl.controller().set_power_params()
+        bay_ctrl.controller().set_power_params()
 
         # set general move params
         bay_ctrl.controller().set_gen_move_params()
@@ -79,13 +79,15 @@ class BSC202(Controller):
 
         # set moverel params
 
-        # set bownindex (skip)
+        # set bownindex
+        bay_ctrl.controller().set_bow_index()
 
         # start update msgs
         bay_ctrl.controller().start_update_msgs()
         # set joy stick params (skip)
         self.modules.append(bay_ctrl)
 
+    self._address = ENUM.MOTHER_BOARD_ID
 
   def route_to_module(self, bayId = 0):
     """

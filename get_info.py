@@ -20,21 +20,28 @@ def info(serial):
   addr_list = [macros.MOTHER_BOARD_ID, macros.BAY_ID_1, macros.BAY_ID_2]
   with pyAPT.BSC202(serial_number=serial) as con:
 
-        #info = con.info()
-        # print('\tController info:')
-        # labels=['S/N','Model','Type','Firmware Ver', 'Notes', 'H/W Ver',
-        #         'Mod State', 'Channels']
+        info = con.info()
+        print('\tController info:')
+        labels=['S/N','Model','Type','Firmware Ver', 'Notes', 'H/W Ver',
+                'Mod State', 'Channels']
 
-        # for idx,ainfo in enumerate(info):
-        #   print('\t%12s: %s'%(labels[idx], bytes(ainfo)))
-        id = 0
-        con.route_to_module(id)
-        con.home()
+        for idx,ainfo in enumerate(info):
+          print('\t%12s: %s'%(labels[idx], bytes(ainfo)))
+
+        numModules = con.numModules()
+        for i in range(numModules):
+          con.route_to_module(i)
+          info = con.info()
+          print('\tController info:')
+          labels=['S/N','Model','Type','Firmware Ver', 'Notes', 'H/W Ver',
+                  'Mod State', 'Channels']
+
+          for idx,ainfo in enumerate(info):
+            print('\t%12s: %s'%(labels[idx], bytes(ainfo)))
+
         print('\n>>>>Press enter to continue')
         sys.stdin.readline()
-        # numModules = con.numModules()
-        # for i in range(numModules):
-        #   con.route_to_module(i)
+
 
 if __name__ == '__main__':
   import sys

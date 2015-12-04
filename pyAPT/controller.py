@@ -122,7 +122,7 @@ class Controller(object):
     while len(data) < length:
       diff = length - len(data)
       data += self._device.read(diff)
-      if not block or (count == 1000):
+      if not block or (count >= timeout*1000):
         break
       count += 1
       time.sleep(0.001)
@@ -228,9 +228,10 @@ class Controller(object):
     # print("msgID = %04x, bayID = %02x, state = %02x, dest = %02x, src = %2x" %(getmsg.messageID, getmsg.param1, getmsg.param2, getmsg.dest, getmsg.src))
     return getmsg.param2 == 1
 
-  def set_chanelable_state(self, channelID = 0x00):
+  def set_chanelable_state(self, channelID = 0x00, state = 0x01):
     setmsg = Message(message.MGMSG_MOD_SET_CHANENABLESTATE,
                               param1 = channelID,
+                              param2 = state,
                               dest = self.address())
     self._send_message(setmsg)
 
@@ -249,6 +250,18 @@ class Controller(object):
                                   dest = self.address())
 
     self._send_message(setmsg)
+
+  def set_lim_switch_params(self, channelID = 0x01, CWHardLimit = 0x0003, CCWHardLimit = 0x0003, CWSoftLimit = 0x0012C000, CCWSoftLimit = 0x00064000, limitMode = 0x0001):
+    datalength = 0x10
+
+    data = [channelID, CWHardLimit, CCWHardLimit, CWSoftLimit, CCWSoftLimit, limitMode]
+    newparams = st.pack('<HHHiiH', *data)
+    msg = Message(message.MGMSG_MOD_SET_LIMSWITCHPARAMS,
+                                              param1 = datalength,
+                                              dest = self.address() | 0x80,
+                                              data = newparams)
+    self._send_message(msg)
+
 
   def set_power_params(self, channelID = 0x01, restFactor = 0x0014, moveFactor = 0x0064):
     """
@@ -277,6 +290,25 @@ class Controller(object):
                                                 dest = self.address() | 0x80,
                                                 data=data)
     self._send_message(msg)
+  def set_bow_index(self, channelID = 0x01, bowIndex = 0x00):
+    """
+    Change the velocity profile of the motor.
+    """
+    datalength = 4
+    data = [channelID, bowIndex]
+    newparams = st.pack('<HH', *data)
+    msg = Message(message.MGMSG_MOT_SET_BOWINDEX,
+                                                param1 = datalength,
+                                                dest = self.address() | 0x80,
+                                                data = newparams)
+    self._send_message(msg)
+
+  def request_bow_index(self, channelID = 0x01):
+    msg = Message(message.MGMSG_MOT_REQ_BOWINDEX,
+                                                param1 = channelID,
+                                                dest = self.address())
+    self._send_message(msg)
+    getmsg = self._wait_message(message.MGMSG_MOT_GET_BOWINDEX)
 
   def set_home_params(self, channelID = 0x01, homeDir = 0x02, limitSwitch = 0x01,
                                       homeVel = None, offsetDist = None):
@@ -406,12 +438,6 @@ class Controller(object):
 
     # newparams= st.pack( '<HHHii',*curparams)
     self.set_home_params()
-
-    if wait:
-      self.resume_end_of_move_messages()
-    else:
-      self.suspend_end_of_move_messages()
-
     # 2.  Move HOME
     homemsg = Message(message.MGMSG_MOT_MOVE_HOME,
                                           dest = 0x21,
@@ -420,10 +446,14 @@ class Controller(object):
                                           param2 = 0x0)
     self._send_message(homemsg)
 
+    if wait:
+      self.resume_end_of_move_messages()
+    else:
+      self.suspend_end_of_move_messages()
     # 3.  HOMED
-    # if wait:
-    #   self._wait_message(message.MGMSG_MOT_MOVE_HOMED)
-    #   print("\tWaiting for homed message!")
+    if wait:
+      self._wait_message(message.MGMSG_MOT_MOVE_HOMED)
+      print("\tWaiting for homed message!")
     # return self.status()
 
   def position(self, channel=1, raw=False):
@@ -482,28 +512,17 @@ class Controller(object):
     """
     params = st.pack( '<Hi', channel, abs_pos_apt)
 
-    if wait:
-      self.resume_end_of_move_messages()
-    else:
-      self.suspend_end_of_move_messages()
-
     movemsg = Message(message.MGMSG_MOT_MOVE_ABSOLUTE,
                                     param1 = 0x06,
                                     dest = 0x21 | 0x80, data=params)
     self._send_message(movemsg)
 
     if wait:
-      msg = self._wait_message(message.MGMSG_MOT_MOVE_COMPLETED)
-      sts = ControllerStatus(self, msg.datastring)
-      # I find sometimes that after the move completed message there is still
-      # some jittering. This aims to wait out the jittering so we are
-      # stationary when we return
-      while sts.velocity_apt:
-        time.sleep(0.01)
-        # sts = self.status()
-      return sts
+      self.resume_end_of_move_messages()
     else:
-      return None
+      self.suspend_end_of_move_messages()
+    if wait:
+      msg = self._wait_message(message.MGMSG_MOT_MOVE_COMPLETED)
 
   def move(self, dist_mm, channel=1, wait=True):
     """
