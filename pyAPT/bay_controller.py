@@ -13,11 +13,14 @@ class bay_controller(object):
     super(bay_controller, self).__init__()
 
     # used for communication
+    # self address is the bay address.
+    # also let the controller address point to the bay address
+    self._address = address
     self._controller = controller
-    self._controller._address = address
+    self._controller._address = self._address
 
   def address(self):
-    return self._controller._address
+    return self._address
 
   def controller(self):
     return self._controller

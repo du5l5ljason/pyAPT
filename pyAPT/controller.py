@@ -48,7 +48,7 @@ class Controller(object):
     SIO_RTS_CTS_HS = (0x0 << 8)
     _checked_c(dev.ftdi_fn.ftdi_setflowctrl(SIO_RTS_CTS_HS))
 
-    _checked_c(dev.ftdi_fn.ftdi_setrts(1))
+    _checked_c(dev.ftdi_fn.ftdi_setrts(0))
 
     self.serial_number = serial_number
     self.label = label
@@ -106,9 +106,9 @@ class Controller(object):
     bytes to be sent to the controller
     """
     self._device.write(m.pack())
-    print "TX: ", m
+    print "TX: ", m.__to_string__()
 
-  def _read(self, length, block=True):
+  def _read(self, length, block=True, timeout=1):
     """
     If block is True, then we will return only when have have length number of
     bytes. Otherwise we will perform a read, then immediately return with
@@ -129,22 +129,22 @@ class Controller(object):
 
     return data
 
-  def _read_message(self):
+  def _read_message(self, timeout = 1):
     data = self._read(message.MGMSG_HEADER_SIZE)
     msg = Message.unpack(data, header_only=True)
     if msg.hasdata:
-      data = self._read(msg.datalength)
+      data = self._read(msg.datalength, timeout)
       msglist = list(msg)
       msglist[-1] = data
       return Message._make(msglist)
 
-    print  "RX: ", msg
+    print  "RX: ", msg.__to_string__()
     return msg
 
-  def _wait_message(self, expected_messageID):
+  def _wait_message(self, expected_messageID, timeout = 1):
     found = False
     while not found:
-      m = self._read_message()
+      m = self._read_message(timeout=1)
       found = m.messageID == expected_messageID
       if found:
         return m
@@ -187,8 +187,7 @@ class Controller(object):
     Notify the controller of the source and destination addresses.
     """
     idmsg =  Message(message.MGMSG_HW_NO_FLASH_PROGRAMMING,
-                              dest = 0x21,
-                              src = 0x01)
+                              dest = self.address())
 
     self._send_message(idmsg)
 
@@ -214,10 +213,96 @@ class Controller(object):
     # print(getmsg)
 
     idmsg = Message(message.MGMSG_MOD_IDENTIFY,
-                              param1 = 0x00,
-                              dest = 0x21)
+                              param1 = self.address())
 
     self._send_message(idmsg)
+
+
+  def request_bay_used(self, bayId = 0x00):
+    reqmsg = Message(message.MGMSG_RACK_REQ_BAYUSED,
+                              param1 = bayId)
+
+    self._send_message(reqmsg)
+    getmsg = self._wait_message(message.MGMSG_RACK_GET_BAYUSED)
+
+    # print("msgID = %04x, bayID = %02x, state = %02x, dest = %02x, src = %2x" %(getmsg.messageID, getmsg.param1, getmsg.param2, getmsg.dest, getmsg.src))
+    return getmsg.param2 == 1
+
+  def set_chanelable_state(self, channelID = 0x00):
+    setmsg = Message(message.MGMSG_MOD_SET_CHANENABLESTATE,
+                              param1 = channelID,
+                              dest = self.address())
+    self._send_message(setmsg)
+
+  def request_chanenable_state(self, channelID = 0x00):
+    reqmsg = Message(message.MGMSG_MOD_REQ_CHANENABLESTATE,
+                              param1 = channelID,
+                              dest = self.address())
+
+    self._send_message(reqmsg)
+    getmsg = self._wait_message(message.MGMSG_MOD_GET_CHANENABLESTATE)
+    print(getmsg)
+
+  def set_dig_output(self, Bit = 0):
+    setmsg = Message(message.MGMSG_MOD_SET_DIGOUTPUTS,
+                                  param1 = Bit,
+                                  dest = self.address())
+
+    self._send_message(setmsg)
+
+  def set_power_params(self, channelID = 0x01, restFactor = 0x0014, moveFactor = 0x0064):
+    """
+    The power needed to hold a motor in a fixed position is much smaller than that required for a move. It is good practice to decrease the power in a stationary motor in order to reduce heating, and thereby minimize thermal movements caused by expansion. Typically, move power should be set to 100%   and rest power to a value significantly less than this.
+    """
+    restFactor = max(restFactor, 1)
+    moveFactor = max(moveFactor, 1)
+    restFactor = min(restFactor, 100)
+    moveFactor = min(moveFactor, 100)
+
+    data = [channelID, restFactor, moveFactor]
+    newparams= st.pack( '<HHH',*data)
+
+    msg = Message(message.MGMSG_MOT_SET_POWERPARAMS,
+                                                param1 = 0x06,
+                                                dest = self.address() | 0x80,
+                                                data=data)
+    self._send_message(msg)
+
+  def set_gen_move_params(self, channelID = 0x01, backlashDist = 0x00000010):
+    data = [channelID, backlashDist]
+    newparams = st.pack('<Hi', *data)
+
+    msg = Message(message.MGMSG_MOT_SET_GENMOVEPARAMS,
+                                                param1 = 0x06,
+                                                dest = self.address() | 0x80,
+                                                data=data)
+    self._send_message(msg)
+
+  def set_home_params(self, channelID = 0x01, homeDir = 0x02, limitSwitch = 0x01,
+                                      homeVel = None, offsetDist = None):
+    if homeVel == None:
+      homeVel = self.max_velocity * self.velocity_scale
+    if offsetDist == None:
+      offsetDist = 0.1 * self.position_scale
+
+    homeVel = min(homeVel, self.max_velocity * self.velocity_scale)
+    offsetDist = min(offsetDist, self.linear_range[1] * self.position_scale)
+    data = [channelID, homeDir, limitSwitch, int(homeVel), int(offsetDist)]
+
+    newparams= st.pack( '<HHHii',*data)
+    homeparamsmsg = Message(message.MGMSG_MOT_SET_HOMEPARAMS,
+                                                param1 = 0x0E,
+                                                dest = self.address() | 0x80,
+                                                src = 0x01,
+                                                data=newparams)
+    self._send_message(homeparamsmsg)
+
+  def start_update_msgs(self, updateRate = 0x0A):
+    msg = Message(message.MGMSG_HW_START_UPDATEMSGS,
+                              param1 = updateRate,
+                              param2 = 0x01,
+                              dest = self.address())
+    self._send_message(msg)
 
   def reset_parameters(self):
     """
@@ -226,7 +311,7 @@ class Controller(object):
     IMPORTANT: only one class of controller appear to support this at the
     moment, that being the BPC30x series.
     """
-    resetmsg = Message(message.MGMSG_MOT_SET_PZSTAGEPARAMDEFAULTS)
+    resetmsg = Message(message.MGMSG_MOT_SET_PZSTAGEPARAMDEFAULTS, dest = self.address())
     self._send_message(resetmsg)
 
   def request_home_params(self, param1 = 0x01,
@@ -295,14 +380,14 @@ class Controller(object):
     # documented, we get the current parameters, assuming they are correct,
     # and then modify only the velocity and offset component, then send it
     # back to the controller.
-    curparams = list(self.request_home_params())
-    print(curparams[-2])
-    print(curparams[-1])
-    # # make sure we never exceed the limits of our stage
+    # curparams = list(self.request_home_params())
+    # print(curparams[-2])
+    # print(curparams[-1])
+    # # # make sure we never exceed the limits of our stage
 
-    offset = min(offset, self.linear_range[1])
-    offset = max(offset, 0)
-    offset_apt = offset * self.position_scale
+    # offset = min(offset, self.linear_range[1])
+    # offset = max(offset, 0)
+    # offset_apt = offset * self.position_scale
 
     # """
     # <: little endian
@@ -313,21 +398,14 @@ class Controller(object):
     # i: 4 bytes for offset distance
     # """
 
-    if velocity:
-      velocity = min(velocity, self.max_velocity)
-      curparams[-2] = int(velocity * self.velocity_scale)
+    # if velocity:
+    #   velocity = min(velocity, self.max_velocity)
+    #   curparams[-2] = int(velocity * self.velocity_scale)
 
-    curparams[-1] = offset_apt
+    # curparams[-1] = offset_apt
 
-    newparams= st.pack( '<HHHii',*curparams)
-
-    # 1.  Set Home params
-    homeparamsmsg = Message(message.MGMSG_MOT_SET_HOMEPARAMS,
-                                                param1 = 0x0E,
-                                                dest = 0x21 | 0x80,
-                                                src = 0x01,
-                                                data=newparams)
-    self._send_message(homeparamsmsg)
+    # newparams= st.pack( '<HHHii',*curparams)
+    self.set_home_params()
 
     if wait:
       self.resume_end_of_move_messages()
@@ -477,6 +555,9 @@ class Controller(object):
     acceleration = min(acceleration, self.max_acceleration)
     max_velocity = min(max_velocity, self.max_velocity)
 
+    print("acceleration = %f, max_velocity = %f, acceleration_scale = %lf, velocity_scale = %lf, " %(acceleration, max_velocity, self.acceleration_scale, self.velocity_scale))
+
+    # set params used for communication.
     acc_apt = acceleration * self.acceleration_scale
     max_vel_apt = max_velocity * self.velocity_scale
 
@@ -543,7 +624,7 @@ class Controller(object):
     """
     reqmsg = Message(message.MGMSG_HW_REQ_INFO, dest = self.address())
     self._send_message(reqmsg)
-    getmsg = self._wait_message(message.MGMSG_HW_GET_INFO)
+    getmsg = self._wait_message(message.MGMSG_HW_GET_INFO, timeout=5)
     """
     <: small endian
     I:    4 bytes for serial number

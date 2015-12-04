@@ -62,7 +62,7 @@ class Message(_Message):
     # if MSB of dest is set, then there is additional data to follow
     if hd.dest & 0x80:
       datalen = hd.param1 | (hd.param2<<8)
-      print(datalen)
+
       if header_only:
         data=None
       else:
@@ -136,6 +136,25 @@ class Message(_Message):
     """
     return self.pack() == other.pack()
 
+  def __to_string__(self):
+    if self.data:
+      hex_data = []
+      for i in self.data:
+        hex_data.append(hex(i))
+
+      return ["".join('msgID = %04x' % (self.messageID)),
+                  "".join('data length = %04x' % (self.param1 | (self.param2<<8))),
+                  "".join('dest = %02x' % (self.dest)),
+                  "".join('src = %02x' % (self.src)),
+                  "".join(str(hex_data))
+                  ]
+    else:
+      return ["".join('msgID = %04x' % (self.messageID)),
+                  "".join('param1 = %02x' % (self.param1)),
+                  "".join('param2 = %02x' % (self.param2)),
+                  "".join('dest = %02x' % (self.dest)),
+                  "".join('src = %02x' % (self.src))]
+
   @property
   def datastring(self):
     if (sys.version_info > (3, 0)):
@@ -192,7 +211,10 @@ MGMSG_MOD_GET_DIGOUTPUTS = 0x0215
 MGMSG_HW_REQ_INFO = 0x0005
 MGMSG_HW_GET_INFO = 0x0006
 MGMSG_HW_NO_FLASH_PROGRAMMING = 0x0018
-MSMSG_HW_RESPONSE = 0x0080
+MGMSG_HW_RESPONSE = 0x0080
+
+MGMSG_HW_START_UPDATEMSGS = 0x0011
+MGMSG_HW_STOP_UPDATEMSGS = 0x0012
 
 MGMSG_MOT_ACK_DCSTATUSUPDATE = 0x0492
 
@@ -225,6 +247,14 @@ MGMSG_MOT_GET_JOGPARAMS = 0x0418
 MGMSG_MOD_SET_LIMSWITCHPARAMS = 0x0423
 MGMSG_MOD_REQ_LIMSWITCHPARAMS = 0x0424
 MGMSG_MOD_GET_LIMSWITCHPARAMS = 0x0425
+
+MGMSG_MOT_SET_POWERPARAMS = 0x0426
+MGMSG_MOT_REQ_POWERPARAMS = 0x0427
+MGMSG_MOT_GET_POWERPARAMS = 0x0428
+
+MGMSG_MOT_SET_GENMOVEPARAMS = 0x043A
+MGMSG_MOT_REQ_GENMOVEPARAMS = 0x043B
+MGMSG_MOT_GET_GENMOVEPARAMS = 0x043C
 
 MGMSG_MOT_SUSPEND_ENDOFMOVEMSGS = 0x046B
 MGMSG_MOT_RESUME_ENDOFMOVEMSGS = 0x046C
