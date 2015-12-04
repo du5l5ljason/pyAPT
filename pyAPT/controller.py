@@ -143,13 +143,19 @@ class Controller(object):
 
   def _wait_message(self, expected_messageID, timeout = 1):
     found = False
+    startTime = time.clock()
     while not found:
       m = self._read_message(timeout=1)
       found = m.messageID == expected_messageID
       if found:
         return m
       else:
-        self.message_queue.append(m)
+        elapsed = time.clock() - startTime
+        if elapsed < timeout:
+          self.message_queue.append(m)
+        else:
+          print "Error: elapsed time is", elapsed, ", exceeds timeout ", timeout
+          return m
 
   def _position_in_range(self, absolute_pos_mm):
     """
@@ -376,13 +382,13 @@ class Controller(object):
     return st.unpack('<HHHii', dstr)
 
   def suspend_end_of_move_messages(self):
-      suspendmsg = Message(message.MGMSG_MOT_SUSPEND_ENDOFMOVEMSGS)
+      suspendmsg = Message(message.MGMSG_MOT_SUSPEND_ENDOFMOVEMSGS,
+                                            dest = self.address())
       self._send_message(suspendmsg)
 
   def resume_end_of_move_messages(self):
       resumemsg = Message(message.MGMSG_MOT_RESUME_ENDOFMOVEMSGS,
-                                          dest = 0x21,
-                                          src = 0x01)
+                                          dest = self.address())
       self._send_message(resumemsg)
 
   def home(self, wait=True, velocity=None, offset=0):
@@ -438,6 +444,7 @@ class Controller(object):
 
     # newparams= st.pack( '<HHHii',*curparams)
     self.set_home_params()
+
     # 2.  Move HOME
     homemsg = Message(message.MGMSG_MOT_MOVE_HOME,
                                           dest = 0x21,
@@ -452,8 +459,12 @@ class Controller(object):
       self.suspend_end_of_move_messages()
     # 3.  HOMED
     if wait:
-      self._wait_message(message.MGMSG_MOT_MOVE_HOMED)
-      print("\tWaiting for homed message!")
+      msg = self._wait_message(message.MGMSG_MOT_MOVE_HOMED)
+      if msg.messageID == message.MGMSG_MOT_MOVE_HOMED:
+        return 0
+      else:
+        return 1
+
     # return self.status()
 
   def position(self, channel=1, raw=False):
@@ -523,6 +534,10 @@ class Controller(object):
       self.suspend_end_of_move_messages()
     if wait:
       msg = self._wait_message(message.MGMSG_MOT_MOVE_COMPLETED)
+      if msg.messageID == MGMSG_MOT_MOVE_COMPLETED:
+        print 0
+      else:
+        print 1
 
   def move(self, dist_mm, channel=1, wait=True):
     """
