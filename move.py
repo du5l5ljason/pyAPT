@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Usage: python move.py <serial> <moduleID> <total_distance_mm> <steps>
+Usage: python move.py <serial> <moduleID> <total_dist_mm> <steps>
 
 This program tells the specified controller to move the stage by the specified
 distance in mm
@@ -19,40 +19,33 @@ def main(args):
   else:
     serial = args[1]
     moduleID = int(args[2])
-    dist = float(args[3])
+    totalDist = float(args[3])
     steps = int(args[4])
-    distPerStep = dist / steps
+    distPerStep = totalDist / steps
   try:
     with pyAPT.BSC202(serial_number=serial) as con:
-        print('Found APT controller S/N',serial)
-        numModules = con.numModules()
-        if moduleID >= numModules:
-            print("Error: moduleID %d is exceeding the number of modules!" % moduleID)
-            return 1
+      print('Found APT controller S/N',serial)
 
-        con.route_to_module(moduleID)
-        status = con.home()
+      con.route_to_module(moduleID)
+      con.home()
+      con.set_pos_counter()
+      con.set_enccounter()
+      print('HOMED')
+      time.sleep(0.5)
+      last_pos = 0
+      for i in range(steps):
+        print('\tMoving stage by %.2fmm...'%(distPerStep), end=' ')
+        status = con.move_rel(dist_mm = distPerStep, start_pos_mm = last_pos)
+        print("status = %d" % status)
         while status > 0:
-            # suspend end of move messages. Resend a move home message.
-            print("\tFailed to receive homed message!")
-            print("\Resend home message!")
-            con.suspend_end_of_move_messages()
-            status = con.home()
+          print('\tFailed to complete move!')
+          status = con.move(last_pos + distPerStep)
 
-        print("\tHomed!")
-
-        for i in range(steps):
-          print('\tMoving stage by %.2fmm...'%(distPerStep), end=' ')
-          status = con.move(distPerStep)
-          while status > 0:
-              # suspend end of move messages. Resend a move home message.
-              print("\tFailed to receive move completed message!")
-              print("\Resend move message!")
-              con.suspend_end_of_move_messages()
-              status = con.move(distPerStep)
-          print('moved')
-          print('\tNew position: %.2fmm'%(con.position()))
-        return 0
+        print('moved')
+        last_pos = last_pos + distPerStep
+        print('\tNew position: %.2fmm'%(last_pos))
+        time.sleep(0.5)
+      return 0
   except pylibftdi.FtdiError as ex:
     print('\tCould not find APT controller S/N of',serial)
     return 1
@@ -60,4 +53,3 @@ def main(args):
 if __name__ == '__main__':
   import sys
   sys.exit(main(sys.argv))
-

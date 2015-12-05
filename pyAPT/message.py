@@ -138,15 +138,12 @@ class Message(_Message):
 
   def __to_string__(self):
     if self.data:
-      hex_data = []
-      for i in self.data:
-        hex_data.append(hex(i))
 
       return ["".join('msgID = %04x' % (self.messageID)),
                   "".join('data length = %04x' % (self.param1 | (self.param2<<8))),
                   "".join('dest = %02x' % (self.dest)),
                   "".join('src = %02x' % (self.src)),
-                  "".join(str(hex_data))
+                  "".join(self.datastring)
                   ]
     else:
       return ["".join('msgID = %04x' % (self.messageID)),
@@ -224,12 +221,14 @@ MGMSG_MOT_SET_PZSTAGEPARAMDEFAULTS = 0x0686
 MGMSG_MOT_MOVE_HOME = 0x0443
 MGMSG_MOT_MOVE_HOMED = 0x0444
 MGMSG_MOT_MOVE_ABSOLUTE = 0x0453
+MGMSG_MOT_MOVE_RELATIVE = 0x0448
 MGMSG_MOT_MOVE_COMPLETED = 0x0464
 
 MGMSG_MOT_SET_HOMEPARAMS = 0x0440
 MGMSG_MOT_REQ_HOMEPARAMS = 0x0441
 MGMSG_MOT_GET_HOMEPARAMS = 0x0442
 
+MGMSG_MOT_SET_POSCOUNTER = 0x0410
 MGMSG_MOT_REQ_POSCOUNTER = 0x0411
 MGMSG_MOT_GET_POSCOUNTER = 0x0412
 
@@ -263,5 +262,18 @@ MGMSG_MOT_SET_BOWINDEX = 0x04F4
 MGMSG_MOT_REQ_BOWINDEX = 0x04F5
 MGMSG_MOT_GET_BOWINDEX = 0x04F6
 
+MGMSG_MOT_SET_MOVERELPARAMS = 0x0445
+MGMSG_MOT_REQ_MOVERELPARAMS = 0x0446
+MGMSG_MOT_GET_MOVERELPARAMS = 0x0447
+
+MGMSG_MOT_SET_MOVEABSPARAMS = 0x0450
+MGMSG_MOT_REQ_MOVEABSPARAMS = 0x0451
+MGMSG_MOT_GET_MOVEABSPARAMS = 0x0452
+
+MGMSG_MOT_SET_ENCCOUNTER = 0x0409
+MGMSG_MOT_REQ_ENCCOUNTER = 0x040A
+MGMSG_MOT_GET_ENCCOUNTER = 0x040B
+
+MGMSG_MOT_MOVE_COMPLETED = 0x0464
 MGMSG_MOT_MOVE_STOP = 0x0465
 MGMSG_MOT_MOVE_STOPPED = 0x0466

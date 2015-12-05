@@ -25,15 +25,12 @@ def main(args):
         con.route_to_module(moduleID)
         for i in range(numTests):
             status = con.home()
-            while status > 0:
+            if status > 0:
                 # suspend end of move messages. Resend a move home message.
                 print("\tFailed to receive homed message!")
-                print("\Resend home message!")
                 con.suspend_end_of_move_messages()
-                status = con.home()
-
-            print("\tHomed!")
-            time.sleep(0.5)
+            else:
+                print("\tHomed!")
             print('iteration : %d' %i)
         print('\nPress any key to exit!')
         sys.stdin.readline()

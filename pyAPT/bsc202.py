@@ -16,8 +16,8 @@ class BSC202(Controller):
     # Note that these values are pulled from the APT User software,
     # as they agree with the real limits of the stage better than
     # what the website or the user manual states
-    self.max_velocity = 1.0
-    self.max_acceleration = 1.0
+    self.max_velocity = 0.5
+    self.max_acceleration = 0.5
 
     # from private communication with thorlabs tech support:
     # steps per revolution: 48
@@ -78,6 +78,8 @@ class BSC202(Controller):
         bay_ctrl.controller().set_home_params()
 
         # set moverel params
+        bay_ctrl.controller().set_move_rel_params()
+        bay_ctrl.controller().set_move_abs_params()
 
         # set bownindex
         bay_ctrl.controller().set_bow_index()

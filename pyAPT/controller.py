@@ -137,17 +137,16 @@ class Controller(object):
       msglist = list(msg)
       msglist[-1] = data
       return Message._make(msglist)
-
-    print  "RX: ", msg.__to_string__()
     return msg
 
   def _wait_message(self, expected_messageID, timeout = 1):
     found = False
     startTime = time.clock()
     while not found:
-      m = self._read_message(timeout=1)
+      m = self._read_message()
       found = m.messageID == expected_messageID
       if found:
+        print  "RX: ", m.__to_string__()
         return m
       else:
         elapsed = time.clock() - startTime
@@ -219,7 +218,8 @@ class Controller(object):
     # print(getmsg)
 
     idmsg = Message(message.MGMSG_MOD_IDENTIFY,
-                              param1 = self.address())
+                              param1 = 0x01,
+                              dest = self.address())
 
     self._send_message(idmsg)
 
@@ -335,6 +335,37 @@ class Controller(object):
                                                 data=newparams)
     self._send_message(homeparamsmsg)
 
+  def set_move_rel_params(self, channelID = 0x01, relDist = 0x00):
+    data = [channelID, relDist]
+
+    newparams= st.pack( '<Hi',*data)
+    homeparamsmsg = Message(message.MGMSG_MOT_SET_MOVERELPARAMS,
+                                                param1 = 0x06,
+                                                dest = self.address() | 0x80,
+                                                data=newparams)
+
+    self._send_message(homeparamsmsg)
+
+  def set_move_abs_params(self, channelID = 0x01, relDist = 0x00):
+    data = [channelID, relDist]
+
+    newparams= st.pack( '<Hi',*data)
+    homeparamsmsg = Message(message.MGMSG_MOT_SET_MOVEABSPARAMS,
+                                                param1 = 0x06,
+                                                dest = self.address() | 0x80,
+                                                data=newparams)
+
+    self._send_message(homeparamsmsg)
+
+  def set_enccounter(self, channelID = 0x01, count = 0):
+    newparams = st.pack('<Hi', channelID, count)
+    msg = Message(message.MGMSG_MOT_SET_ENCCOUNTER,
+                                                param1 = 0x06,
+                                                dest = self.address() | 0x80,
+                                                data=newparams)
+
+    self._send_message(msg)
+
   def start_update_msgs(self, updateRate = 0x0A):
     msg = Message(message.MGMSG_HW_START_UPDATEMSGS,
                               param1 = updateRate,
@@ -443,34 +474,44 @@ class Controller(object):
     # curparams[-1] = offset_apt
 
     # newparams= st.pack( '<HHHii',*curparams)
-    self.set_home_params()
+    homed = False
+    numMoves = 0
+    while ~(homed == True):
+      self.set_home_params()
 
-    # 2.  Move HOME
-    homemsg = Message(message.MGMSG_MOT_MOVE_HOME,
-                                          dest = 0x21,
-                                          src = 0x01,
-                                          param1 = 0x01,
-                                          param2 = 0x0)
-    self._send_message(homemsg)
+      # 2.  Move HOME
+      homemsg = Message(message.MGMSG_MOT_MOVE_HOME,
+                                            dest = self.address(),
+                                            param1 = 0x01)
+      self._send_message(homemsg)
 
-    if wait:
-      self.resume_end_of_move_messages()
-    else:
-      self.suspend_end_of_move_messages()
-    # 3.  HOMED
-    if wait:
-      msg = self._wait_message(message.MGMSG_MOT_MOVE_HOMED)
-      if msg.messageID == message.MGMSG_MOT_MOVE_HOMED:
-        return 0
+
+      # 3.  HOMED
+      if wait:
+        msg = self._wait_message(message.MGMSG_MOT_MOVE_HOMED, timeout = 1)
+        if msg.messageID == message.MGMSG_MOT_MOVE_HOMED:
+          break
+        else:
+          homed = False
+        self.resume_end_of_move_messages()
       else:
+        self.suspend_end_of_move_messages()
+      numMoves = numMoves + 1
+      if numMoves >= 5:
         return 1
 
+    return 0
     # return self.status()
+  def set_pos_counter(self, channelID = 1, position = 0):
+    data = [channelID, position]
+    newparams = st.pack('<Hi', *data)
+    msg = Message(message.MGMSG_MOT_SET_POSCOUNTER, dest = self.address(), data=newparams)
+    self._send_message(msg)
 
   def position(self, channel=1, raw=False):
     reqmsg = Message(message.MGMSG_MOT_REQ_POSCOUNTER,
                                   param1=channel,
-                                  dest = 0x21)
+                                  dest = self.address())
     self._send_message(reqmsg)
 
     getmsg = self._wait_message(message.MGMSG_MOT_GET_POSCOUNTER)
@@ -525,7 +566,7 @@ class Controller(object):
 
     movemsg = Message(message.MGMSG_MOT_MOVE_ABSOLUTE,
                                     param1 = 0x06,
-                                    dest = 0x21 | 0x80, data=params)
+                                    dest = self.address() | 0x80, data=params)
     self._send_message(movemsg)
 
     if wait:
@@ -534,10 +575,10 @@ class Controller(object):
       self.suspend_end_of_move_messages()
     if wait:
       msg = self._wait_message(message.MGMSG_MOT_MOVE_COMPLETED)
-      if msg.messageID == MGMSG_MOT_MOVE_COMPLETED:
-        print 0
+      if msg.messageID == message.MGMSG_MOT_MOVE_COMPLETED:
+        return 0
       else:
-        print 1
+        return 1
 
   def move(self, dist_mm, channel=1, wait=True):
     """
@@ -549,9 +590,6 @@ class Controller(object):
     goto() and returns it returns. Check documentation for goto() for return
     values and such.
     """
-    curpos = self.position()
-    newpos = curpos + dist_mm
-
     # We could implement MGMSG_MOT_MOVE_RELATIVE, or we can use goto again
     # because we calculate the new absolute position anyway.
     #
@@ -560,9 +598,41 @@ class Controller(object):
     # position first. The advantage of reusing self.goto is that it is easier
     # to implement initially.
     #
-    # Of course by the time I have finished writing this comment, I could have
-    # just implemented MGMSG_MOT_MOVE_RELATIVE.
-    return self.goto(newpos, channel=channel, wait=wait)
+    return self.goto(dist_mm, channel=channel, wait=wait)
+
+  def move_rel(self, dist_mm, start_pos_mm, channelID =1, wait=True):
+
+    abs_pos_mm = start_pos_mm + dist_mm
+    if self.soft_limits and not self._position_in_range(abs_pos_mm):
+      raise OutOfRangeError(abs_pos_mm, self.linear_range)
+
+    rel_pos_apt = int(dist_mm * self.position_scale)
+
+    # set move rel params
+    self.set_move_rel_params(channelID = channelID, relDist = rel_pos_apt)
+    """
+    <: little endian
+    H: 2 bytes for channel id
+    i: 4 bytes for absolute position
+    """
+    params = st.pack( '<Hi', channelID, rel_pos_apt)
+    if wait:
+      self.resume_end_of_move_messages()
+    else:
+      self.suspend_end_of_move_messages()
+
+    movemsg = Message(message.MGMSG_MOT_MOVE_RELATIVE,
+                                    param1 = channelID,
+                                    dest = self.address())
+    self._send_message(movemsg)
+
+    if wait:
+      msg = self._wait_message(message.MGMSG_MOT_MOVE_COMPLETED)
+      print msg
+      if msg.messageID == message.MGMSG_MOT_MOVE_COMPLETED:
+        return 0
+      else:
+        return 1
 
   def set_soft_limits(self, soft_limits):
     """
